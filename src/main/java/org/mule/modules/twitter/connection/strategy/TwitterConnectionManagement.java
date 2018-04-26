@@ -20,7 +20,7 @@ import org.mule.api.annotations.param.Default;
 import org.mule.api.annotations.param.Optional;
 import org.mule.api.context.MuleContextAware;
 import twitter4j.*;
-import twitter4j.auth.AccessToken;
+import twitter4j.conf.Configuration;
 import twitter4j.conf.ConfigurationBuilder;
 import twitter4j.internal.http.alternative.HttpClientHiddenConstructionArgument;
 import twitter4j.internal.http.alternative.MuleHttpClient;
@@ -29,18 +29,6 @@ import twitter4j.internal.http.alternative.MuleHttpClient;
 public class TwitterConnectionManagement implements MuleContextAware {
 
     private Twitter twitter;
-
-    /**
-     * The consumer key used by this application
-     */
-    @Configurable
-    private String consumerKey;
-
-    /**
-     * The consumer key secret by this application
-     */
-    @Configurable
-    private String consumerSecret;
 
     /**
      * Whether to use SSL in API calls to Twitter
@@ -100,46 +88,47 @@ public class TwitterConnectionManagement implements MuleContextAware {
     @Placement(group = "Streaming settings", tab = "Streaming")
     private String siteStreamBaseUrl;
 
-    private String accessToken;
+    private String connectionId;
 
-    private String accessTokenSecret;
+    private Configuration config;
 
     /**
      * Connects to Twitter
      *
-     * @param accessKey    The access key provided by Twitter
-     * @param accessSecret The access secret provided by Twitter
+     * @param consumerKey       The consumer key used by this application
+     * @param consumerSecret    The consumer secret by this application
+     * @param accessToken       The access token provided by Twitter OAuth tool.
+     * @param accessTokenSecret The access token secret provided by Twitter OAuth tool.
      * @throws org.mule.api.ConnectionException when the connection fails
      */
     @Connect
     @TestConnectivity
-    public void connect(@ConnectionKey String accessKey, String accessSecret) throws ConnectionException {
-        ConfigurationBuilder cb = new ConfigurationBuilder();
-        cb.setUseSSL(useSSL);
-        cb.setHttpProxyHost(proxyHost);
-        cb.setHttpProxyPort(proxyPort);
-        cb.setHttpProxyUser(proxyUsername);
-        cb.setHttpProxyPassword(proxyPassword);
+    public void connect(@ConnectionKey String consumerKey, String consumerSecret, @ConnectionKey String accessToken, String accessTokenSecret) throws ConnectionException {
+        this.config = new ConfigurationBuilder()
+        		.setTweetModeExtended(true)
+                .setOAuthConsumerKey(consumerKey)
+                .setOAuthConsumerSecret(consumerSecret)
+                .setOAuthAccessToken(accessToken)
+                .setOAuthAccessTokenSecret(accessTokenSecret)
+                .setStreamBaseURL(getStreamBaseUrl())
+                .setSiteStreamBaseURL(getSiteStreamBaseUrl())
+                .setHttpProxyHost(getProxyHost())
+                .setHttpProxyPort(getProxyPort())
+                .setHttpProxyUser(getProxyUsername())
+                .setHttpProxyPassword(getProxyPassword()).build();
 
         HttpClientHiddenConstructionArgument.setUseMule(true);
-        twitter = new TwitterFactory(cb.build()).getInstance();
-
-        twitter.setOAuthConsumer(consumerKey, consumerSecret);
-        if (accessKey != null) {
-            twitter.setOAuthAccessToken(new AccessToken(accessKey, accessSecret));
-            setAccessToken(accessKey);
-            setAccessTokenSecret(accessSecret);
-        }
+        twitter = new TwitterFactory(config).getInstance();
 
         //for connectivity testing
         try {
-            if (accessKey != null) {
-                twitter.getRateLimitStatus();
-            }
+            twitter.getRateLimitStatus();
 
         } catch (TwitterException te) {
             throw new ConnectionException(ConnectionExceptionCode.UNKNOWN, null, "Bad credentials", te);
         }
+
+        this.connectionId = consumerKey + "-" + accessToken;
     }
 
     @Disconnect
@@ -154,43 +143,12 @@ public class TwitterConnectionManagement implements MuleContextAware {
 
     @ConnectionIdentifier
     public String getConnectionIdentifier() {
-        return getAccessToken() + "-" + getAccessTokenSecret();
+        return this.connectionId;
     }
 
     public TwitterStream newStream() {
-        ConfigurationBuilder cb = new ConfigurationBuilder()
-                .setUseSSL(useSSL)
-                .setOAuthConsumerKey(consumerKey)
-                .setOAuthConsumerSecret(consumerSecret)
-                .setStreamBaseURL(getStreamBaseUrl())
-                .setSiteStreamBaseURL(getSiteStreamBaseUrl())
-                .setHttpProxyHost(proxyHost)
-                .setHttpProxyPort(proxyPort)
-                .setHttpProxyUser(proxyUsername)
-                .setHttpProxyPassword(proxyPassword);
-
-        if (getAccessToken() != null) {
-            cb.setOAuthAccessToken(accessToken).setOAuthAccessTokenSecret(accessTokenSecret);
-        }
-
         HttpClientHiddenConstructionArgument.setUseMule(false);
-        return new TwitterStreamFactory(cb.build()).getInstance();
-    }
-
-    public String getAccessToken() {
-        return accessToken;
-    }
-
-    public void setAccessToken(String accessToken) {
-        this.accessToken = accessToken;
-    }
-
-    public String getAccessTokenSecret() {
-        return accessTokenSecret;
-    }
-
-    public void setAccessTokenSecret(String accessTokenSecret) {
-        this.accessTokenSecret = accessTokenSecret;
+        return new TwitterStreamFactory(config).getInstance();
     }
 
     public String getStreamBaseUrl() {
@@ -207,22 +165,6 @@ public class TwitterConnectionManagement implements MuleContextAware {
 
     public void setSiteStreamBaseUrl(String siteStreamBaseUrl) {
         this.siteStreamBaseUrl = siteStreamBaseUrl;
-    }
-
-    public String getConsumerKey() {
-        return consumerKey;
-    }
-
-    public void setConsumerKey(String consumerKey) {
-        this.consumerKey = consumerKey;
-    }
-
-    public String getConsumerSecret() {
-        return consumerSecret;
-    }
-
-    public void setConsumerSecret(String consumerSecret) {
-        this.consumerSecret = consumerSecret;
     }
 
     public boolean isUseSSL() {
@@ -261,10 +203,6 @@ public class TwitterConnectionManagement implements MuleContextAware {
         this.proxyPassword = proxyPassword;
     }
 
-    public Twitter getTwitterClient() {
-        return twitter;
-    }
-
     public boolean getUseSSL() {
         return useSSL;
     }
@@ -275,5 +213,9 @@ public class TwitterConnectionManagement implements MuleContextAware {
 
     public void setMuleContext(MuleContext context) {
         MuleHttpClient.setMuleContext(context);
+    }
+
+    public Twitter getTwitter() {
+        return twitter;
     }
 }

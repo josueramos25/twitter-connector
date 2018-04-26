@@ -17,12 +17,21 @@ import org.mule.module.http.api.client.HttpRequestOptions;
 import org.mule.module.http.api.client.HttpRequestOptionsBuilder;
 import org.mule.modules.twitter.MuleHttpResponse;
 import org.mule.transport.http.HttpConnector;
+
+import twitter4j.HttpClient;
+import twitter4j.HttpClientConfiguration;
+import twitter4j.HttpParameter;
+import twitter4j.HttpRequest;
+import twitter4j.HttpResponse;
+import twitter4j.HttpResponseListener;
+import twitter4j.RequestMethod;
 import twitter4j.TwitterException;
+import twitter4j.auth.Authorization;
 import twitter4j.internal.http.*;
 
 import java.io.*;
+import java.util.Map;
 
-import static twitter4j.internal.http.RequestMethod.POST;
 
 /**
  * A version of the twitter4j client that uses Mule.
@@ -43,7 +52,6 @@ public class MuleHttpClient implements HttpClient {
         client = new DefaultLocalMuleClient(context);
     }
 
-    @Override
     public HttpResponse request(final HttpRequest req) throws TwitterException {
         Object body = "";
         final boolean hasFile = HttpParameter.containsFile(req.getParameters());
@@ -53,9 +61,8 @@ public class MuleHttpClient implements HttpClient {
         if (req.getMethod().equals(RequestMethod.POST)) {
             body = new OutputHandler() {
 
-                @Override
                 public void write(MuleEvent event, OutputStream os) throws IOException {
-                    if (req.getMethod() == POST) {
+                    if (req.getMethod() == RequestMethod.POST) {
                         if (hasFile) {
                             DataOutputStream out = new DataOutputStream(os);
                             for (HttpParameter param : req.getParameters()) {
@@ -117,9 +124,84 @@ public class MuleHttpClient implements HttpClient {
         }
     }
 
-    @Override
     public void shutdown() { // NOSONAR
     }
+
+	@Override
+	public void addDefaultRequestHeader(String arg0, String arg1) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public HttpResponse delete(String arg0) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse delete(String arg0, HttpParameter[] arg1, Authorization arg2, HttpResponseListener arg3)
+			throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse get(String arg0) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse get(String arg0, HttpParameter[] arg1, Authorization arg2, HttpResponseListener arg3)
+			throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Map<String, String> getRequestHeaders() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse head(String arg0) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse post(String arg0) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse post(String arg0, HttpParameter[] arg1, Authorization arg2, HttpResponseListener arg3)
+			throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse put(String arg0) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse put(String arg0, HttpParameter[] arg1, Authorization arg2, HttpResponseListener arg3)
+			throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public HttpResponse request(HttpRequest arg0, HttpResponseListener arg1) throws TwitterException {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
 
 }

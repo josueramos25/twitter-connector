@@ -8,9 +8,10 @@ package org.mule.modules.twitter;
 
 import org.mule.api.MuleMessage;
 import org.mule.api.transformer.TransformerException;
+
+import twitter4j.HttpClientConfiguration;
+import twitter4j.HttpResponse;
 import twitter4j.TwitterException;
-import twitter4j.internal.http.HttpClientConfiguration;
-import twitter4j.internal.http.HttpResponse;
 
 import java.io.IOException;
 import java.io.InputStream;

@@ -22,12 +22,14 @@ import org.mule.api.annotations.param.Optional;
 import org.mule.api.callback.SourceCallback;
 import org.mule.modules.twitter.UserEvent.EventType;
 import org.mule.modules.twitter.connection.strategy.TwitterConnectionManagement;
+
 import twitter4j.*;
+import twitter4j.Query.ResultType;
+import twitter4j.Query.Unit;
 import twitter4j.auth.AccessToken;
 import twitter4j.auth.RequestToken;
 
 import javax.validation.constraints.NotNull;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +49,8 @@ public class TwitterConnector {
     @ConnectionStrategy
     private TwitterConnectionManagement connectionManagement;
 
-    private TwitterStream stream;
+    private Twitter twitter;
+    private TwitterStream twitterStream;
 
     /**
      * Returns tweets that match a specified query.
@@ -79,7 +82,7 @@ public class TwitterConnector {
                               @Optional Long sinceId,
                               @Optional String geocode,
                               @Optional String radius,
-                              @Default(value = Query.MILES) String unit,
+                              @Optional String unit,
                               @Optional String until,
                               @Optional String resultType) throws TwitterException {
         final Query q = new Query(query);
@@ -104,15 +107,15 @@ public class TwitterConnector {
             final String[] geocodeSplit = StringUtils.split(geocode, ',');
             final double latitude = Double.parseDouble(StringUtils.replace(geocodeSplit[0], " ", ""));
             final double longitude = Double.parseDouble(StringUtils.replace(geocodeSplit[1], " ", ""));
-            q.setGeoCode(new GeoLocation(latitude, longitude), Double.parseDouble(radius), unit);
+            q.setGeoCode(new GeoLocation(latitude, longitude), Double.parseDouble(radius), Unit.valueOf(unit));
         }
         if (until != null) {
             q.setUntil(until);
         }
         if (resultType != null) {
-            q.setResultType(resultType);
+            q.setResultType(ResultType.valueOf(resultType));
         }
-        return getConnectionManagement().getTwitterClient().search(q);
+        return twitter.search(q);
     }
 
     /**
@@ -144,7 +147,7 @@ public class TwitterConnector {
                                                 @Placement(group = "Pagination") @Default(value = "20") int count,
                                                 @Placement(group = "Pagination") @Default(value = "-1") long sinceId)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getHomeTimeline(getPaging(page, count, sinceId));
+        return twitter.getHomeTimeline(getPaging(page, count, sinceId));
     }
 
     /**
@@ -180,7 +183,7 @@ public class TwitterConnector {
                                                             @Placement(group = "Pagination") @Default(value = "20") int count,
                                                             @Placement(group = "Pagination") @Default(value = "-1") long sinceId)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getUserTimeline(screenName, getPaging(page, count, sinceId));
+        return twitter.getUserTimeline(screenName, getPaging(page, count, sinceId));
     }
 
     /**
@@ -216,7 +219,7 @@ public class TwitterConnector {
                                                         @Placement(group = "Pagination") @Default(value = "20") int count,
                                                         @Placement(group = "Pagination") @Default(value = "-1") long sinceId)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getUserTimeline(userId, getPaging(page, count, sinceId));
+        return twitter.getUserTimeline(userId, getPaging(page, count, sinceId));
     }
 
     protected Paging getPaging(int page, int count, long sinceId) {
@@ -252,7 +255,7 @@ public class TwitterConnector {
                                                     @Placement(group = "Pagination") @Default(value = "20") int count,
                                                     @Placement(group = "Pagination") @Default(value = "-1") long sinceId)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getMentionsTimeline(getPaging(page, count, sinceId));
+        return twitter.getMentionsTimeline(getPaging(page, count, sinceId));
     }
 
     /**
@@ -279,7 +282,7 @@ public class TwitterConnector {
                                                 @Placement(group = "Pagination") @Default(value = "20") int count,
                                                 @Placement(group = "Pagination") @Default(value = "-1") long sinceId)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getRetweetsOfMe(getPaging(page, count, sinceId));
+        return twitter.getRetweetsOfMe(getPaging(page, count, sinceId));
     }
 
     /**
@@ -297,7 +300,7 @@ public class TwitterConnector {
      */
     @Processor
     public Status showStatus(long id) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().showStatus(id);
+        return twitter.showStatus(id);
     }
 
     /**
@@ -310,7 +313,7 @@ public class TwitterConnector {
      */
     @Processor
     public User showUser() throws TwitterException {
-        return getConnectionManagement().getTwitterClient().showUser(getConnectionManagement().getTwitterClient().getId());
+        return twitter.showUser(twitter.getId());
     }
 
     /**
@@ -329,12 +332,12 @@ public class TwitterConnector {
     @Processor
     public PagableResponseList<User> getFollowers(@Default(value = "-1") long cursor)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getFollowersList(getConnectionManagement().getTwitterClient().getId(), cursor);
+        return twitter.getFollowersList(twitter.getId(), cursor);
     }
 
     /**
-     * Updates the authenticating user's status also know as tweeting. For each update attempt, the update text is compared 
-     * with the authenticating user’s recent tweets. Any attempt that would result in duplication will be blocked, resulting 
+     * Updates the authenticating user's status also know as tweeting. For each update attempt, the update text is compared
+     * with the authenticating user’s recent tweets. Any attempt that would result in duplication will be blocked, resulting
      * in a 403 error. Therefore, a user cannot submit the same status twice in a row.
      * This method calls http://api.twitter.com/1.1/statuses/update
      * <p/>
@@ -364,7 +367,7 @@ public class TwitterConnector {
         if (latitude != null && longitude != null) {
             update.setLocation(new GeoLocation(latitude, longitude));
         }
-        Status response = getConnectionManagement().getTwitterClient().updateStatus(update);
+        Status response = twitter.updateStatus(update);
 
         //Twitter4j doesn't throw exception when json reponse has 'error: Could not authenticate with OAuth'
         if (response.getId() == -1) {
@@ -390,7 +393,7 @@ public class TwitterConnector {
      */
     @Processor
     public Status destroyStatus(long statusId) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().destroyStatus(statusId);
+        return twitter.destroyStatus(statusId);
     }
 
     /**
@@ -407,7 +410,7 @@ public class TwitterConnector {
      */
     @Processor
     public Status retweetStatus(long statusId) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().retweetStatus(statusId);
+        return twitter.retweetStatus(statusId);
     }
 
     /**
@@ -425,7 +428,7 @@ public class TwitterConnector {
      */
     @Processor
     public ResponseList<Status> getRetweets(long statusId) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getRetweets(statusId);
+        return twitter.getRetweets(statusId);
     }
 
     /**
@@ -444,9 +447,9 @@ public class TwitterConnector {
     public AccessToken setOauthVerifier(@Optional RequestToken requestToken, String oauthVerifier) throws TwitterException {
         AccessToken accessToken;
         if (requestToken != null) {
-            accessToken = getConnectionManagement().getTwitterClient().getOAuthAccessToken(requestToken, oauthVerifier);
+            accessToken = twitter.getOAuthAccessToken(requestToken, oauthVerifier);
         } else {
-            accessToken = getConnectionManagement().getTwitterClient().getOAuthAccessToken(oauthVerifier);
+            accessToken = twitter.getOAuthAccessToken(oauthVerifier);
         }
 
         logger.info("Got OAuth access tokens. Access token:" + accessToken.getToken()
@@ -466,7 +469,7 @@ public class TwitterConnector {
      */
     @Processor
     public RequestToken requestAuthorization(@Optional String callbackUrl) throws TwitterException {
-        RequestToken token = getConnectionManagement().getTwitterClient().getOAuthRequestToken(callbackUrl);
+        RequestToken token = twitter.getOAuthRequestToken(callbackUrl);
         return token;
     }
 
@@ -492,7 +495,7 @@ public class TwitterConnector {
     public ResponseList<Place> reverseGeoCode(@Placement(group = "Coordinates") @Optional Double latitude,
                                               @Placement(group = "Coordinates") @Optional Double longitude)
             throws TwitterException {
-        return getConnectionManagement().getTwitterClient().reverseGeoCode(createQuery(latitude, longitude, null));
+        return twitter.reverseGeoCode(createQuery(latitude, longitude, null));
     }
 
     /**
@@ -512,7 +515,7 @@ public class TwitterConnector {
     public ResponseList<Place> searchPlaces(@Placement(group = "Coordinates") @Optional Double latitude,
                                             @Placement(group = "Coordinates") @Optional Double longitude,
                                             @Optional String ip) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().searchPlaces(createQuery(latitude, longitude, ip));
+        return twitter.searchPlaces(createQuery(latitude, longitude, ip));
     }
 
     private GeoQuery createQuery(Double latitude, Double longitude, String ip) {
@@ -535,38 +538,7 @@ public class TwitterConnector {
      */
     @Processor
     public Place getGeoDetails(String id) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getGeoDetails(id);
-    }
-
-    /**
-     * Creates a new place at the given latitude and longitude.
-     * <p/>
-     * {@sample.xml ../../../doc/twitter-connector.xml.sample twitter:createPlace}
-     *
-     * @param placeName       The placeName a place is known as.
-     * @param containedWithin The place_id within which the new place can be found.
-     *                        Try and be as close as possible with the containing place. For
-     *                        example, for a room in a building, set the contained_within as the
-     *                        building place_id.
-     * @param token           The token found in the response from geo/similar_places.
-     * @param latitude        The latitude the place is located at.
-     * @param longitude       The longitude the place is located at.
-     * @param streetAddress   optional: This parameter searches for places which have
-     *                        this given street address. There are other well-known, and
-     *                        application specific attributes available. Custom attributes are
-     *                        also permitted. Learn more about Place Attributes.
-     * @return a new {@link Place}
-     * @throws TwitterException when Twitter service or network is unavailable
-     */
-    @Processor
-    public Place createPlace(String placeName,
-                             String containedWithin,
-                             String token,
-                             @Placement(group = "Coordinates") Double latitude,
-                             @Placement(group = "Coordinates") Double longitude,
-                             @Optional String streetAddress) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().createPlace(placeName, containedWithin, token, new GeoLocation(latitude, longitude),
-                streetAddress);
+        return twitter.getGeoDetails(id);
     }
 
     /**
@@ -594,11 +566,11 @@ public class TwitterConnector {
      * @throws TwitterException when Twitter service or network is unavailable
      */
     @Processor
-    public SimilarPlaces getSimilarPlaces(@Placement(group = "Coordinates") Double latitude,
+    public List<Place> getSimilarPlaces(@Placement(group = "Coordinates") Double latitude,
                                           @Placement(group = "Coordinates") Double longitude,
                                           String placeName, @Optional String containedWithin,
                                           @Optional String streetAddress) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getSimilarPlaces(new GeoLocation(latitude, longitude),
+        return twitter.getSimilarPlaces(new GeoLocation(latitude, longitude),
                 placeName, containedWithin, streetAddress);
     }
 
@@ -620,7 +592,7 @@ public class TwitterConnector {
     public ResponseList<Location> getAvailableTrends()
             throws TwitterException {
 
-        return getConnectionManagement().getTwitterClient().getAvailableTrends();
+        return twitter.getAvailableTrends();
     }
 
     /**
@@ -736,7 +708,7 @@ public class TwitterConnector {
     public void userStream(@Placement(group = "Keywords to Track") List<String> keywords, final SourceCallback callback_) {
         initStream();
         final SoftCallback callback = new SoftCallback(callback_);
-        stream.addListener(new UserStreamAdapter() {
+        twitterStream.addListener(new UserStreamAdapter() {
             @Override
             public void onException(Exception ex) {
                 logger.warn("An exception occured while processing user stream", ex);
@@ -851,7 +823,7 @@ public class TwitterConnector {
                 }
             }
         });
-        stream.user(toStringArray(keywords));
+        twitterStream.user(toStringArray(keywords));
     }
 
 
@@ -874,7 +846,7 @@ public class TwitterConnector {
                            final SourceCallback callback_) {
         initStream();
         final SoftCallback callback = new SoftCallback(callback_);
-        stream.addListener(new SiteStreamsAdapter() {
+        twitterStream.addListener(new SiteStreamsAdapter() {
 
             @Override
             public void onException(Exception ex) {
@@ -891,7 +863,7 @@ public class TwitterConnector {
             }
 
         });
-        stream.site(withFollowings, toLongArray(userIds));
+        twitterStream.site(withFollowings, toLongArray(userIds));
     }
 
     /**
@@ -908,7 +880,7 @@ public class TwitterConnector {
      */
     @Processor
     public DirectMessage sendDirectMessageByScreenName(String screenName, String message) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().sendDirectMessage(screenName, message);
+        return twitter.sendDirectMessage(screenName, message);
     }
 
     /**
@@ -925,7 +897,7 @@ public class TwitterConnector {
      */
     @Processor
     public DirectMessage sendDirectMessageByUserId(long userId, String message) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().sendDirectMessage(userId, message);
+        return twitter.sendDirectMessage(userId, message);
     }
 
     /**
@@ -942,7 +914,7 @@ public class TwitterConnector {
      */
     @Processor
     public Trends getPlaceTrends(@Default("1") int woeid) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getPlaceTrends(woeid);
+        return twitter.getPlaceTrends(woeid);
     }
 
     /**
@@ -963,14 +935,14 @@ public class TwitterConnector {
      */
     @Processor
     public ResponseList<Location> getClosestTrends(double latitude, double longitude) throws TwitterException {
-        return getConnectionManagement().getTwitterClient().getClosestTrends(new GeoLocation(latitude, longitude));
+        return twitter.getClosestTrends(new GeoLocation(latitude, longitude));
     }
 
     private void initStream() {
-        if (stream != null) {
+        if (twitterStream != null) {
             throw new IllegalStateException("Only one stream can be consumed per twitter account");
         }
-        this.stream = getConnectionManagement().newStream();
+        this.twitterStream = getConnectionManagement().newStream();
     }
 
     private String[] toStringArray(List<String> list) {
@@ -983,7 +955,7 @@ public class TwitterConnector {
     private TwitterStream listenToStatues(final SourceCallback callback_) {
         initStream();
         final SoftCallback callback = new SoftCallback(callback_);
-        stream.addListener(new StatusAdapter() {
+        twitterStream.addListener(new StatusAdapter() {
             @Override
             public void onException(Exception ex) {
                 logger.warn("An exception occured while processing status stream", ex);
@@ -998,7 +970,7 @@ public class TwitterConnector {
                 }
             }
         });
-        return stream;
+        return twitterStream;
     }
 
     private long[] toLongArray(List<String> longList) {
@@ -1018,6 +990,7 @@ public class TwitterConnector {
 
     public void setConnectionManagement(TwitterConnectionManagement connectionManagement) {
         this.connectionManagement = connectionManagement;
+        this.twitter = connectionManagement.getTwitter();
     }
 
     static final class SoftCallback implements SourceCallback {
@@ -1027,7 +1000,6 @@ public class TwitterConnector {
             this.callback = callback;
         }
 
-        @Override
         public Object process() throws Exception {
             try {
                 return callback.process();
@@ -1036,7 +1008,6 @@ public class TwitterConnector {
             }
         }
 
-        @Override
         public Object process(Object payload) {
             try {
                 return callback.process(payload);
@@ -1045,7 +1016,6 @@ public class TwitterConnector {
             }
         }
 
-        @Override
         public Object process(Object payload, Map<String, Object> properties) throws Exception {
             try {
                 return callback.process(payload);
@@ -1054,7 +1024,6 @@ public class TwitterConnector {
             }
         }
 
-        @Override
         public MuleEvent processEvent(MuleEvent event) throws MuleException {
             try {
                 return callback.processEvent(event);
